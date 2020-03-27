@@ -51,6 +51,6 @@
             _countySvgMap.Save(newColorizedSvgPath);
         }
 
-        private static string MakeCssColor(Color c) => String.Format("#{0:X2}{1:X2}{2:X2}FF", c.R, c.G, c.B);
+        private static string MakeCssColor(Color c) => String.Format("#{0:X2}{1:X2}{2:X2}", c.R, c.G, c.B);
     }
 }
