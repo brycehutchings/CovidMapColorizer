@@ -14,7 +14,7 @@
         /// </summary>
         class CsseCovidDailyRecord
         {
-            public static Dictionary<string, CsseCovidDailyRecord> LoadRecordsFromCsv(string csvPath)
+            public static Dictionary<string, CsseCovidDailyRecord> ReadCsv(string csvPath)
             {
                 var countyRecords = new Dictionary<string, CsseCovidDailyRecord>();
 
@@ -70,23 +70,17 @@
             [Name("Last_Update")]
             public DateTime LastUpdate { get; set; }
 
-            [Name("Lat")]
-            public float Lat { get; set; }
-
-            [Name("Long_")]
-            public float Longitude { get; set; }
-
             [Name("Confirmed")]
-            public float Confirmed { get; set; }
+            public int Confirmed { get; set; }
 
             [Name("Deaths")]
-            public float Deaths { get; set; }
+            public int Deaths { get; set; }
 
             [Name("Recovered")]
-            public float Recovered { get; set; }
+            public int Recovered { get; set; }
 
             [Name("Active")]
-            public float Active { get; set; }
+            public int Active { get; set; }
 
             [Name("Combined_Key")]
             public string CombinedKey { get; set; }
