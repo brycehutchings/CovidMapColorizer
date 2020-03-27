@@ -6,20 +6,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="PEP_2018_PEPANNRES_with_ann.csv" />
-    <None Remove="Usa_counties_large.svg" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="PEP_2018_PEPANNRES_with_ann.csv">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Usa_counties_large.svg">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="CsvHelper" Version="15.0.3" />
   </ItemGroup>
 

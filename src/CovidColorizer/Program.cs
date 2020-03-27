@@ -1,52 +1,23 @@
-﻿namespace CovidPivot
+﻿namespace CovidColorizer
 {
     using System;
     using System.Collections.Generic;
+    using System.Drawing;
     using System.Globalization;
     using System.IO;
+    using System.Linq;
     using System.Xml.Linq;
     using CsvHelper;
-    using CsvHelper.Configuration.Attributes;
 
-    class Program
+    partial class Program
     {
-        class CsseCovidDailyRecord
+        private static readonly Color[] ColorGradient = { Color.Yellow, Color.Red, Color.Fuchsia };
+
+        class CountyData
         {
-            [Name("FIPS")]
-            public string Fips { get; set; }
+            public float Rate { get; set; }
 
-            [Name("Admin2")]
-            public string County { get; set; }
-
-            [Name("Province_State")]
-            public string ProvinceState { get; set; }
-
-            [Name("Country_Region")]
-            public string CountryRegion { get; set; }
-
-            [Name("Last_Update")]
-            public DateTime LastUpdate { get; set; }
-
-            [Name("Lat")]
-            public float Lat { get; set; }
-
-            [Name("Long_")]
-            public float Longitude { get; set; }
-
-            [Name("Confirmed")]
-            public int Confirmed { get; set; }
-
-            [Name("Deaths")]
-            public int Deaths { get; set; }
-
-            [Name("Recovered")]
-            public int Recovered { get; set; }
-
-            [Name("Active")]
-            public int Active { get; set; }
-
-            [Name("Combined_Key")]
-            public string CombinedKey { get; set; }
+            public string TitleSuffix { get; set; }
         }
 
         static void Main(string[] args)
@@ -55,85 +26,71 @@
             // County population: https://www2.census.gov/programs-surveys/popest/tables/2010-2019/counties/totals/co-est2019-annres.xlsx
             // Census County reference: https://www2.census.gov/geo/docs/reference/codes/files/national_county.txt
 
-            var countyRecords = LoadCsseCovidDailyRecords(@"C:\git\COVID-19\csse_covid_19_data\csse_covid_19_daily_reports\03-25-2020.csv");
-            ColorizeCountySvg(countyRecords, @"Usa_counties_large.svg", @"Usa_counties_large_covid_colorized.svg");
-        }
+            // Modes:
+            // Color normalized by population.
+            // Color by rate of change (with avg).
 
-        static void ColorizeCountySvg(Dictionary<string, CsseCovidDailyRecord> dailyCovidRecords, string originalSvgPath, string newColorizedSvgPath)
-        {
-            XDocument countySvgMap = XDocument.Load(originalSvgPath);
+            var countyPopluations = CountyPopulation.LoadCsv(@"C:\git\CovidMapColorizer\data\PEP_2018_PEPANNRES_with_ann.csv");
 
-            var ns = XNamespace.Get("http://www.w3.org/2000/svg");
-            foreach (XElement countyPath in countySvgMap.Element(ns + "svg").Element(ns + "g").Elements(ns + "path"))
+            var countyCovidRecords = CsseCovidDailyRecord.LoadRecordsFromCsv(@"C:\git\COVID-19\csse_covid_19_data\csse_covid_19_daily_reports\03-26-2020.csv");
+
+            var countyPercentCovid = new Dictionary<string, CountyData>();
+            foreach (var record in countyCovidRecords)
             {
-                var fips = (string)countyPath.Attribute("id");
-                if (fips.Length <= 1 || fips[0] != 'c')
+                int countyPopulation;
+                if (!countyPopluations.TryGetValue(record.Key, out countyPopulation))
                 {
-                    Console.Error.WriteLine($"County path has unexpected FIPS id '{fips}'");
+                    Console.Error.WriteLine($"Unable to find county population for {record.Value.CombinedKey}");
+                    continue;
                 }
 
-                fips = fips.Substring(1); // Skip the 'c' to get the FIPS value that matches the Ccse covid data.
+                float linearValue = record.Value.Confirmed / (float)countyPopulation;
+                string titleSuffix = $"({(int)(linearValue * 100000)} per 100,000 confirmed)";
 
-                CsseCovidDailyRecord countyCovidRecord;
-                if (dailyCovidRecords.TryGetValue(fips, out countyCovidRecord))
-                {
-                    // Hack in a color for now as proof of concept.
-                    var r = Math.Min((int)(countyCovidRecord.Confirmed / (float)500 * 255), 255);
-                    var g = 255 - r;
-                    var color = "#" + r.ToString("X2") + g.ToString("X2") + "FF";
-
-                    countyPath.SetAttributeValue("style", "stroke:green; fill: " + color);
-
-                    // TODO: Add Death/Confirmed to tool tip.
-                }
-                else
-                {
-                    Console.WriteLine($"Missing county: {countyCovidRecord.CombinedKey}");
-                }
+                countyPercentCovid.Add(record.Key, new CountyData { Rate = linearValue, TitleSuffix = titleSuffix });
             }
 
-            countySvgMap.Save(newColorizedSvgPath);
+            // Using the county with the highest rate as the maximum will drown out most of the data, so ignore the worst 1%.
+            var countiesWithHit = countyPercentCovid.Where(kvp => kvp.Value.Rate > 0).OrderBy(kvp => kvp.Value.Rate).ToList();
+            float maxValue = countiesWithHit.Skip((int)(countiesWithHit.Count * 0.99f)).First().Value.Rate;
+
+            var colorizer = new SvgUSCountyColorizer(@"C:\git\CovidMapColorizer\data\Usa_counties_large.svg");
+            colorizer.Colorize(
+                countyPercentCovid.ToDictionary(
+                    r => r.Key,
+                    r => new CountySvgData
+                    {
+                        FillColor = LinearColorize(r.Value.Rate, 0, maxValue),
+                        TitleSuffix = r.Value.TitleSuffix
+                    }),
+                @"Usa_counties_large_covid_colorized.svg");
         }
 
-        static Dictionary<string, CsseCovidDailyRecord> LoadCsseCovidDailyRecords(string csvPath)
+        private static Color LinearColorize(double value, double min, double max)
         {
-            var countyRecords = new Dictionary<string, CsseCovidDailyRecord>();
-
-            using (var reader = new StreamReader(csvPath))
-            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            if (value == min)
             {
-                foreach (var countyRecord in csv.GetRecords<CsseCovidDailyRecord>())
-                {
-                    if (countyRecord.CountryRegion != "US")
-                    {
-                        continue; // Ignore record for non-US county (countries).
-                    }
-
-                    if (string.IsNullOrEmpty(countyRecord.Fips))
-                    {
-                        // TODO: Fix up the limited bad data here.
-                        Console.Error.WriteLine($"Ignoring US record with empty FIPS ({countyRecord.CombinedKey}).");
-                        continue;
-                    }
-
-                    if (!countyRecords.TryAdd(countyRecord.Fips, countyRecord))
-                    {
-                        //
-                        // Unfortunately there are duplicates like FIPS 35013 listed as both Dona Ana and Doña Ana with different confirmed counts.
-                        //
-                        Console.Error.WriteLine($"Merging Duplicate FIPS {countyRecord.Fips} ({countyRecord.CombinedKey}).");
-
-                        var existingCountyRecord = countyRecords[countyRecord.Fips];
-                        existingCountyRecord.Confirmed = Math.Max(existingCountyRecord.Confirmed, countyRecord.Confirmed);
-                        existingCountyRecord.Deaths = Math.Max(existingCountyRecord.Deaths, countyRecord.Deaths);
-                        existingCountyRecord.Recovered = Math.Max(existingCountyRecord.Recovered, countyRecord.Recovered);
-                        existingCountyRecord.Active = Math.Max(existingCountyRecord.Active, countyRecord.Active);
-                    }
-
-                }
+                return Color.FromArgb(255, 255, 224); // Very light yellow for counties without anything.
             }
 
-            return countyRecords;
+            int colorGradientRanges = ColorGradient.Length - 1;
+
+            // Normalize to an index, but fractional.
+            double rawIndex = (value - min) / max * colorGradientRanges;
+
+            double colorGradientIndexLow = Math.Floor(rawIndex);
+            double t = rawIndex - colorGradientIndexLow;
+            double invT = 1 - t;
+
+            Color lowColor = ColorGradient[Math.Min((int)colorGradientIndexLow, ColorGradient.Length - 1)];
+            Color highColor = ColorGradient[Math.Min((int)colorGradientIndexLow + 1, ColorGradient.Length - 1)];
+
+            // Turn into HTML color
+            Color linearizedColor = Color.FromArgb(
+                (int)Math.Round(lowColor.R * invT + highColor.R * t),
+                (int)Math.Round(lowColor.G * invT + highColor.G * t),
+                (int)Math.Round(lowColor.B * invT + highColor.B * t));
+            return linearizedColor;
         }
     }
 }
