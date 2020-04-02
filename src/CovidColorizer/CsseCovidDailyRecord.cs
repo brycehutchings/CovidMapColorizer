@@ -14,41 +14,57 @@
         /// </summary>
         class CsseCovidDailyRecord
         {
+            public static void HandleRecord(ref Dictionary<string, CsseCovidDailyRecord> countyRecords, CsseCovidDailyRecord countyRecord)
+            {
+                if (countyRecord.CountryRegion != "US")
+                {
+                    return; // Ignore record for non-US county (countries).
+                }
+
+                if (string.IsNullOrEmpty(countyRecord.Fips))
+                {
+                    // TODO: Fix up the limited bad data here.
+                    Console.Error.WriteLine($"Ignoring US record with empty FIPS ({countyRecord.CombinedKey}).");
+                    return;
+                }
+
+                if (!countyRecords.TryAdd(countyRecord.Fips, countyRecord))
+                {
+                    //
+                    // Unfortunately there are duplicates like FIPS 35013 listed as both Dona Ana and Doña Ana with different confirmed counts.
+                    //
+                    Console.Error.WriteLine($"Merging Duplicate FIPS {countyRecord.Fips} ({countyRecord.CombinedKey}).");
+
+                    var existingCountyRecord = countyRecords[countyRecord.Fips];
+                    existingCountyRecord.Confirmed = Math.Max(existingCountyRecord.Confirmed, countyRecord.Confirmed);
+                    existingCountyRecord.Deaths = Math.Max(existingCountyRecord.Deaths, countyRecord.Deaths);
+                    existingCountyRecord.Recovered = Math.Max(existingCountyRecord.Recovered, countyRecord.Recovered);
+                    existingCountyRecord.Active = Math.Max(existingCountyRecord.Active, countyRecord.Active);
+                }
+            }
             public static Dictionary<string, CsseCovidDailyRecord> ReadCsv(string csvPath)
             {
                 var countyRecords = new Dictionary<string, CsseCovidDailyRecord>();
-
                 using (var reader = new StreamReader(csvPath))
                 using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
                 {
                     foreach (var countyRecord in csv.GetRecords<CsseCovidDailyRecord>())
                     {
-                        if (countyRecord.CountryRegion != "US")
-                        {
-                            continue; // Ignore record for non-US county (countries).
-                        }
+                        HandleRecord(ref countyRecords, countyRecord);
+                    }
+                }
+                return countyRecords;
+            }
 
-                        if (string.IsNullOrEmpty(countyRecord.Fips))
-                        {
-                            // TODO: Fix up the limited bad data here.
-                            Console.Error.WriteLine($"Ignoring US record with empty FIPS ({countyRecord.CombinedKey}).");
-                            continue;
-                        }
-
-                        if (!countyRecords.TryAdd(countyRecord.Fips, countyRecord))
-                        {
-                            //
-                            // Unfortunately there are duplicates like FIPS 35013 listed as both Dona Ana and Doña Ana with different confirmed counts.
-                            //
-                            Console.Error.WriteLine($"Merging Duplicate FIPS {countyRecord.Fips} ({countyRecord.CombinedKey}).");
-
-                            var existingCountyRecord = countyRecords[countyRecord.Fips];
-                            existingCountyRecord.Confirmed = Math.Max(existingCountyRecord.Confirmed, countyRecord.Confirmed);
-                            existingCountyRecord.Deaths = Math.Max(existingCountyRecord.Deaths, countyRecord.Deaths);
-                            existingCountyRecord.Recovered = Math.Max(existingCountyRecord.Recovered, countyRecord.Recovered);
-                            existingCountyRecord.Active = Math.Max(existingCountyRecord.Active, countyRecord.Active);
-                        }
-
+            public static Dictionary<string, CsseCovidDailyRecord> ReadCsvFromString(string contents)
+            {
+                var countyRecords = new Dictionary<string, CsseCovidDailyRecord>();
+                using (var reader = new StringReader(contents))
+                using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+                {
+                    foreach (var countyRecord in csv.GetRecords<CsseCovidDailyRecord>())
+                    {
+                        HandleRecord(ref countyRecords, countyRecord);
                     }
                 }
 

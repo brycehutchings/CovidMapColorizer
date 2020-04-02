@@ -5,6 +5,7 @@
     using System.Drawing;
     using System.Globalization;
     using System.IO;
+    using System.Threading.Tasks;
     using System.Linq;
     using System.Xml.Linq;
     using CsvHelper;
@@ -26,16 +27,18 @@
             // County population: https://www2.census.gov/programs-surveys/popest/tables/2010-2019/counties/totals/co-est2019-annres.xlsx
             // Census County reference: https://www2.census.gov/geo/docs/reference/codes/files/national_county.txt
 
+            var getter = new CsseCovidDailyRecordGetter();
+            getter.Go().Wait();
+
             var countyPercentCovid = new Dictionary<string, CountyData>();
             Func<CountyData, Color> getFillColor;
 
-            var countyCovidRecords = CsseCovidDailyRecord.ReadCsv(@"C:\git\COVID-19\csse_covid_19_data\csse_covid_19_daily_reports\03-26-2020.csv");
-
+            var countyCovidRecords = CsseCovidDailyRecord.ReadCsvFromString(getter.Contents);
 
             int mode = 1; // This is obviously a hack for now until I do command-line parsing. 0=Normalized to population 1=Rate of change.
             if (mode == 1)
             {
-                var countyPopluations = CountyPopulation.LoadCsv(@"C:\git\CovidMapColorizer\data\PEP_2018_PEPANNRES_with_ann.csv");
+                var countyPopluations = CountyPopulation.LoadCsv(@"../../data/PEP_2018_PEPANNRES_with_ann.csv");
 
                 // Point in time mode
                 // Stat: confirmed or dead
@@ -118,7 +121,7 @@
                     LinearColorize(countyData.Rate.Value, 0, maxValue);
             }
 
-            var colorizer = new SvgUSCountyColorizer(@"C:\git\CovidMapColorizer\data\Usa_counties_large.svg");
+            var colorizer = new SvgUSCountyColorizer(@"../../data/Usa_counties_large.svg");
             colorizer.Colorize(
                 countyPercentCovid.ToDictionary(
                     r => r.Key,
