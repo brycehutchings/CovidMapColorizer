@@ -1,4 +1,4 @@
-namespace CovidColorizer
+﻿namespace CovidColorizer
 {
     using System;
     using System.Collections.Generic;
@@ -121,7 +121,7 @@ namespace CovidColorizer
                     LinearColorize(countyData.Rate.Value, 0, maxValue);
             }
 
-            var colorizer = new SvgUSCountyColorizer(@"C:\git\CovidMapColorizer\data\Usa_counties_large.svg");
+            var colorizer = new SvgUSCountyColorizer(@"../../data/Usa_counties_large.svg");
             colorizer.Colorize(
                 countyPercentCovid.ToDictionary(
                     r => r.Key,
